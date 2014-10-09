@@ -9,26 +9,55 @@
     tools:context="com.example.quadrocopter.MainActivity" >
 
     <TextView
-        android:id="@+id/accelOut"
+        android:id="@+id/out1"
         android:layout_width="wrap_content"
-        android:layout_height="50dp"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:layout_toRightOf="@+id/textView1" />
+
+    <TextView
+        android:id="@+id/out2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/out1"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/out1" />
+
+    <TextView
+        android:id="@+id/out3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/out2"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/out2" />
+
+    <TextView
+        android:id="@+id/textView1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignBaseline="@+id/out1"
+        android:layout_alignBottom="@+id/out1"
+        android:layout_alignLeft="@+id/textView2"
+        android:layout_marginRight="10dp"
+        android:text="Out1:" />
+
+    <TextView
+        android:id="@+id/textView2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentRight="true" />
+        android:layout_below="@+id/out1"
+        android:layout_marginRight="10dp"
+        android:text="Out2:" />
 
     <TextView
-        android:id="@+id/magOut"
+        android:id="@+id/textView3"
         android:layout_width="wrap_content"
-        android:layout_height="50dp"
-        android:layout_alignLeft="@+id/accelOut"
-        android:layout_alignParentRight="true"
-        android:layout_below="@+id/accelOut" />
-
-    <TextView
-        android:id="@+id/gyroOut"
-        android:layout_width="wrap_content"
-        android:layout_height="50dp"
-        android:layout_alignLeft="@+id/magOut"
-        android:layout_alignParentRight="true"
-        android:layout_below="@+id/magOut" />
+        android:layout_height="wrap_content"
+        android:layout_alignBaseline="@+id/out3"
+        android:layout_alignBottom="@+id/out3"
+        android:layout_alignParentLeft="true"
+        android:layout_marginRight="10dp"
+        android:text="Out3:" />
 
 </RelativeLayout>

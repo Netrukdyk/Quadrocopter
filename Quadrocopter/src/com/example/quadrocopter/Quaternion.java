@@ -1,7 +1,8 @@
 package com.example.quadrocopter;
 
-import java.util.Vector;
+import android.annotation.SuppressLint;
 
+@SuppressLint("DefaultLocale")
 public class Quaternion {
 	public double w;
 	public double x;
