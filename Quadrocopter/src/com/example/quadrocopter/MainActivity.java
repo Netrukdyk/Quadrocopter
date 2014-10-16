@@ -1,5 +1,10 @@
 package com.example.quadrocopter;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
+import org.mavlink.messages.ardupilotmega.msg_attitude_quaternion;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.hardware.Sensor;
@@ -7,12 +12,16 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
+import android.util.Log;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnTouchListener;
+import android.view.WindowManager;
+import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 
-public class MainActivity extends Activity implements SensorEventListener {
+public class MainActivity extends Activity implements SensorEventListener, OnTouchListener {
 	private SensorManager sensorManager;
 	private TextView out1, out2, out3;
 	private Sensor magnet, accel, gyro;
@@ -25,94 +34,156 @@ public class MainActivity extends Activity implements SensorEventListener {
 	float[] accels;
 	float[] gyros;
 
-	Ahrs ahrs = new Ahrs();
-	BTConnection blueTooth;
-	Handler serverHandler, uiHandler;
+	static ByteBuffer sendBuffer;
 
+	Ahrs ahrs = new Ahrs();
+	int speed = SensorManager.SENSOR_DELAY_FASTEST;
+	Bluetooth bt;
+	long lastSent, lastEvent;
+	Vector3 mag, acc, gyr;
+	float dt;
+	Quaternion q;
+	msg_attitude_quaternion mavMsg;
+	byte [] bluetoothBuffer;
+	ImageButton bigButton;
+	float active;
+	Boolean simulator = true;
+	
 	@SuppressLint("HandlerLeak")
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main);
 
 		out1 = (TextView) findViewById(R.id.out1);
 		out2 = (TextView) findViewById(R.id.out2);
 		out3 = (TextView) findViewById(R.id.out3);
-
+		bigButton = (ImageButton) findViewById(R.id.bigButton);
+		bigButton.setOnTouchListener(this);
+		
 		sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
 		magnet = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 		gyro = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 		accel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-		sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_FASTEST);
-		sensorManager.registerListener(this, magnet, SensorManager.SENSOR_DELAY_FASTEST);
-		sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_FASTEST);
-
-		blueTooth = new BTConnection(uihHandler);
-		blueTooth.connect();
+		sensorManager.registerListener(this, accel, speed);
+		sensorManager.registerListener(this, magnet, speed);
+		sensorManager.registerListener(this, gyro, speed);
+		sendBuffer = ByteBuffer.allocate(18);
+		bt = (simulator) ? new Bluetooth("Arduino") : new Bluetooth("RemoteControl");
 	}
-
-	@SuppressLint("DefaultLocale")
+	
+	int sequence = 0;
 	@Override
 	public void onSensorChanged(SensorEvent event) {
-
+		if (lastEvent == 0)
+			lastEvent = event.timestamp;
+		
 		switch (event.sensor.getType()) {
 			case Sensor.TYPE_MAGNETIC_FIELD :
-				mags = event.values.clone();
+				mag = new Vector3(-event.values[0], -event.values[1], -event.values[2]);
 				break;
 			case Sensor.TYPE_GYROSCOPE :
-				gyros = event.values.clone();
+				gyr = new Vector3(event.values[0], event.values[1], event.values[2]);
 				break;
 			case Sensor.TYPE_ACCELEROMETER :
-				accels = event.values.clone();
+				acc = new Vector3(event.values[0], event.values[1], event.values[2]);
 				break;
 		}
+		
+		if (mag != null && acc != null && gyr != null) {
+			if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+				dt = (float) ((event.timestamp - lastEvent) / 1000000000.0);
+				ahrs.update(gyr, acc, mag, dt);
+				//if (out1.getText() == null)
+					out1.setText(String.valueOf(100 / (Math.round(dt * 100))) + " Hz Sensor");
+				
+				lastEvent = event.timestamp;
+			}
 
-		if (mags != null && accels != null && gyros != null) {
+			if (lastSent == 0)
+				lastSent = event.timestamp;
 
-			@SuppressWarnings("unused")
-			Vector3 mag = new Vector3(mags[0], mags[1], mags[2]);
-			Vector3 acc = new Vector3(accels[0], accels[1], accels[2]);
-			Vector3 gyr = new Vector3(gyros[0], gyros[1], gyros[2]);
+			if (event.timestamp - lastSent >= 70000000) {
 
-			ahrs.updateIMU(gyr, acc, 0.01);
-			String q = ahrs.getQuaternion().toString();
-			out3.setText(q);
-			blueTooth.send(q);
+				q = ahrs.getQuaternion();
+				out3.setText(ahrs.getQuaternion().toString());
+				
+				mavMsg = new msg_attitude_quaternion(0, 0);
+				mavMsg.sequence = sequence++;
+				mavMsg.rollspeed = active;
+				mavMsg.q1 = (float) q.w;
+				mavMsg.q2 = (float) q.x;
+				mavMsg.q3 = (float) q.y;
+				mavMsg.q4 = (float) q.z;
+				try {
+					bluetoothBuffer = mavMsg.encode();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 
+				 bt.write(bluetoothBuffer);
+				 bt.flush();				 
+
+				if (out2.getText() == "")
+					out2.setText(String.valueOf((1000000000 / (event.timestamp - lastSent))) + " Hz Bluetooth");
+
+				lastSent = event.timestamp;
+			}
 		}
-
 	}
-
 	@Override
 	public void onAccuracyChanged(Sensor sensor, int accuracy) {
 		// TODO Auto-generated method stub
-
 	}
 
 	@Override
 	protected void onPause() {
 		super.onPause();
-		sensorManager.unregisterListener(this);
+		// sensorManager.unregisterListener(this);
 	}
 
 	@Override
+	protected void onDestroy() {
+		// TODO Auto-generated method stub
+		super.onDestroy();
+		if(bt != null & bt.mConnectedThread != null)
+			bt.mConnectedThread.cancel();
+	}
+	@Override
 	protected void onResume() {
 		super.onResume();
-		sensorManager.registerListener(this, magnet, SensorManager.SENSOR_DELAY_FASTEST);
-		sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_FASTEST);
-		sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_FASTEST);
+		sensorManager.registerListener(this, magnet, speed);
+		sensorManager.registerListener(this, accel, speed);
+		sensorManager.registerListener(this, gyro, speed);
+	}
+	@Override
+	public boolean onTouch(View v, MotionEvent event) {
+
+	    switch (event.getAction() & MotionEvent.ACTION_MASK) {
+
+	    case MotionEvent.ACTION_DOWN:
+	        v.setPressed(true);
+	        active = 1.0f;
+	        Log.v("btn","pressed");
+	        break;
+	    case MotionEvent.ACTION_UP:
+	    case MotionEvent.ACTION_OUTSIDE:
+	        v.setPressed(false);
+	        active = 0.0f;
+	        Log.v("btn","unpressed");
+	        break;
+	    case MotionEvent.ACTION_POINTER_DOWN:
+	        break;
+	    case MotionEvent.ACTION_POINTER_UP:
+	        break;
+	    case MotionEvent.ACTION_MOVE:
+	        break;
+	    }
+
+	    return true;
 	}
 
-	// The Handler that gets information back from the BluetoothChatService
-	private final Handler uihHandler = new Handler() {
-		@Override
-		public void handleMessage(Message msg) {
-			switch (msg.what) {
-				case BTConnection.MSG_TOAST :
-					Toast.makeText(getApplicationContext(), msg.getData().getString("MSG"), Toast.LENGTH_SHORT).show();
-					break;
-			}
-		}
-	};
 }

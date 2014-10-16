@@ -64,7 +64,7 @@ public class BTConnection {
 			mmSocket = mmDevice.createRfcommSocketToServiceRecord(uuid);
 			mmSocket.connect();
 			mmOutputStream = mmSocket.getOutputStream();
-			mmInputStream = mmSocket.getInputStream();
+			//mmInputStream = mmSocket.getInputStream();
 			Log.v("BT","Ok");
 			sendToUI(MSG_TOAST, "Connected");
 			connected = true;
